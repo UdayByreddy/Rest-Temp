@@ -1,4 +1,4 @@
-package com.insurance.creditlens.service;
+package com.restTemp.InterService.Service;
 
 import com.restTemp.InterService.Dto.*;
 import com.restTemp.InterService.Entity.*;
@@ -6,6 +6,7 @@ import com.restTemp.InterService.Helper.Helper;
 import com.restTemp.InterService.Repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ import java.util.Optional;
 @Slf4j
 public class CreditLensService {
 
+    @Autowired
     private final RestTemplate restTemplate;
     private final AccountDetailsRepository accountDetailsRepository;
     private final BamsScoringRepository bamsScoringRepository;
@@ -36,13 +38,6 @@ public class CreditLensService {
     @Value("${creditlens.api.key:}")
     private String apiKey;
 
-    // ============================================
-    // Public API Methods
-    // ============================================
-
-    /**
-     * Fetch CreditLens data from external API by BAMS ID
-     */
     public CreditLensResponse fetchCreditLensDataFromAPI(Integer bamsId) {
         log.info("Fetching CreditLens data from external API for BAMS ID: {}", bamsId);
 

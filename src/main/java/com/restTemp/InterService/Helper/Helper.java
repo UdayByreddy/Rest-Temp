@@ -5,6 +5,10 @@ import com.restTemp.InterService.Dto.StatementOutputDTO;
 import com.restTemp.InterService.Entity.AccountDetails;
 import com.restTemp.InterService.Entity.Statement;
 import com.restTemp.InterService.Repository.AccountDetailsRepository;
+import org.springframework.context.annotation.Bean;
+import org.springframework.stereotype.Component;
+
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -12,6 +16,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
+@Component
 public class Helper {
 
 

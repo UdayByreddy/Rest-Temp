@@ -6,7 +6,6 @@ import com.restTemp.InterService.Helper.Helper;
 import com.restTemp.InterService.Repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -26,7 +25,6 @@ import java.util.Optional;
 @Slf4j
 public class CreditLensService {
 
-    @Autowired
     private final RestTemplate restTemplate;
     private final AccountDetailsRepository accountDetailsRepository;
     private final BamsScoringRepository bamsScoringRepository;
@@ -35,43 +33,55 @@ public class CreditLensService {
     @Value("${creditlens.api.url}")
     private String creditLensApiUrl;
 
-    @Value("${creditlens.api.key:}")
+    @Value("${creditlens.api.key}")
     private String apiKey;
 
-    public CreditLensResponse fetchCreditLensDataFromAPI(Integer bamsId) {
-        log.info("Fetching CreditLens data from external API for BAMS ID: {}", bamsId);
 
-        String url = creditLensApiUrl + "/creditlens/" + bamsId;
+    public CreditLensResponse fetchCreditLensDataFromAPI(CreditLensRequestDTO request) {
+        log.info("Fetching CreditLens data from external Boomi API with request: {}", request);
 
         try {
+            // Build headers with x-api-key
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             if (apiKey != null && !apiKey.isEmpty()) {
-                headers.set("Authorization", "Bearer " + apiKey);
+                headers.set("x-api-key", apiKey);
+                log.debug("Added x-api-key to request headers");
             }
 
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            // Create HTTP entity with the full request body
+            HttpEntity<CreditLensRequestDTO> entity = new HttpEntity<>(request, headers);
 
+            log.info("Calling Boomi API at URL: {}", creditLensApiUrl);
+
+            // Make POST request to Boomi API
             ResponseEntity<CreditLensResponse> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
+                    creditLensApiUrl,
+                    HttpMethod.POST,
                     entity,
                     CreditLensResponse.class
             );
 
-            log.info("Successfully fetched CreditLens data from API for BAMS ID: {}", bamsId);
+            log.info("Successfully fetched CreditLens data from Boomi API");
             return response.getBody();
 
         } catch (Exception e) {
-            log.error("Error fetching CreditLens data from API for BAMS ID: {}", bamsId, e);
+            log.error("Error fetching CreditLens data from Boomi API: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to fetch CreditLens data from API: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Save CreditLens data to database
-     */
+
+    public CreditLensResponse fetchCreditLensDataFromAPI(Integer bamsId) {
+        log.info("Fetching CreditLens data using legacy method for BAMS ID: {}", bamsId);
+
+        // Create request DTO from bamsId
+        CreditLensRequestDTO request = createRequestFromBamsId(bamsId);
+
+        return fetchCreditLensDataFromAPI(request);
+    }
+
     @Transactional
     public void saveCreditLensData(CreditLensResponse response) {
         log.info("Saving CreditLens data to database");
@@ -95,39 +105,38 @@ public class CreditLensService {
         }
     }
 
-    /**
-     * Fetch from API and save to database in one transaction
-     */
+
+    @Transactional
+    public CreditLensResponse fetchAndSaveCreditLensData(CreditLensRequestDTO request) {
+        log.info("Fetching and saving CreditLens data with request payload");
+
+        CreditLensResponse response = fetchCreditLensDataFromAPI(request);
+        saveCreditLensData(response);
+
+        log.info("Successfully fetched and saved CreditLens data");
+        return response;
+    }
+
+
     @Transactional
     public CreditLensResponse fetchAndSaveCreditLensData(Integer bamsId) {
         log.info("Fetching and saving CreditLens data for BAMS ID: {}", bamsId);
 
-        CreditLensResponse response = fetchCreditLensDataFromAPI(bamsId);
-        saveCreditLensData(response);
-
-        log.info("Successfully fetched and saved CreditLens data for BAMS ID: {}", bamsId);
-        return response;
+        CreditLensRequestDTO request = createRequestFromBamsId(bamsId);
+        return fetchAndSaveCreditLensData(request);
     }
 
-    /**
-     * Get AccountDetails by BAMS ID
-     */
     public Optional<AccountDetails> getAccountByBamsId(Integer bamsId) {
         log.info("Retrieving account details for BAMS ID: {}", bamsId);
         return accountDetailsRepository.findByBamsId(bamsId);
     }
 
-    /**
-     * Get all AccountDetails
-     */
+
     public List<AccountDetails> getAllAccounts() {
         log.info("Retrieving all accounts");
         return accountDetailsRepository.findAll();
     }
 
-    /**
-     * Get BamsScoring by BAMS ID
-     */
     public Optional<BamsScoring> getBamsScoringByBamsId(String bamsId) {
         log.info("Retrieving BAMS scoring for BAMS ID: {}", bamsId);
         return bamsScoringRepository.findByBamsId(bamsId);
@@ -147,6 +156,28 @@ public class CreditLensService {
         return bamsScoringRepository.existsByBamsId(bamsId);
     }
 
+    /**
+     * Helper method to create request DTO from bamsId (for backward compatibility)
+     */
+    private CreditLensRequestDTO createRequestFromBamsId(Integer bamsId) {
+        ScoreRequestInputDTO scoreRequestInput = new ScoreRequestInputDTO();
+        scoreRequestInput.setScoreRequestId(String.valueOf(System.currentTimeMillis()));
+        scoreRequestInput.setTransactionTimeStamp(
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+        );
+        scoreRequestInput.setSourceSystem("Surety_Bams");
+
+        SubmissionInputDTO submissionInput = new SubmissionInputDTO();
+        submissionInput.setBamsId(String.valueOf(bamsId));
+        submissionInput.setCreditLensId("");
+        submissionInput.setStatementDate("");
+
+        CreditLensRequestDTO request = new CreditLensRequestDTO();
+        request.setScoreRequestInput(scoreRequestInput);
+        request.setSubmissionInput(submissionInput);
+
+        return request;
+    }
 
     /**
      * Save BamsScoring with all nested data
